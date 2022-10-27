@@ -1,0 +1,35 @@
+---
+title: "Akinwande Ayomide"
+about: 
+  id: hero-heading
+  template: solana
+  image: abt_logo.png
+  links:
+    - icon: twitter
+      text: Twitter
+      href: https://twitter.com
+    - icon: github
+      text: Github
+      href: https://github.com
+    - icon: linkedin
+      text: Linkedin
+      href: https://linkedin.com/
+---
+
+::: {#hero-heading}
+A strategic data analyst with a (passion) for developing (operational process) that (solves) business problems, improves business efficiency and delivering actionable insights using (various) analytical tools.
+
+
+## Highlights
+
+##### Other Projects
+
+::: {.list}
+<ul class="ul-s">
+  <li><a href="www.mysite.com">PM2.5 sensor device offset Prediction.</a></li>
+  <li><a href="www.mysite.com">Hospitality Management Dashboard.</a></li>
+  <li><a href="www.mysite.com">Segmentation Analysis Applications.</a></li>
+  <li><a href="www.mysite.com">Market Basket Analysis Application.</a></li>
+</ul>
+:::
+:::

@@ -1,0 +1,305 @@
+---
+title:  Sensor Offset Prediction
+jupyter: python3
+---
+
+
+### Libraries
+
+```{python}
+
+
+from sklearn.model_selection import KFold, cross_validate, cross_val_score, cross_val_predict  # train_test_split,
+from sklearn.preprocessing import StandardScaler
+from sklearn.utils import resample
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.impute import KNNImputer
+
+from sklearn.model_selection import GridSearchCV
+
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+
+
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, ConfusionMatrixDisplay, precision_score, recall_score
+```
+
+```{python}
+#| echo: false
+#| message: false
+#| warning: false
+
+import pandas as pd
+import numpy as np
+from plotnine import *
+
+import function as cfun
+
+train = pd.read_csv("data/train.csv", parse_dates = ['Datetime'])
+
+```
+
+### Feature Engineering
+For the training set all missing values will be removed from the data.  
+Additional variables such as an ordinal air quality index (as integer) for both sensors will be added to the training set.  
+Also the hour and day of the year will be extracted from the datetime variable after which the datetime variable will be dropped with the Id variable as they are both features with high cardinality.
+
+
+```{python}
+#| message: false
+#| warning: false
+
+ord_train = train.sort_values(by="Datetime")
+
+add_df = cfun.add_attributes(ord_train, drop_nan_value=True, fill_nan_value=False)
+
+train_c = add_df.drop_missing_value()
+train_c = add_df.add_air_quality_index()
+train_c = add_df.add_period_variables(hour=True, dayofyear=True)
+train_c = train_c.drop(["ID", "Datetime"], axis = 1)
+
+train_c.info()
+```
+
+##### Separating the label for the predictors.
+
+```{python}
+outcome = "Offset_fault"
+X = train_c.drop(outcome, axis = 1)
+y = train_c[outcome]
+
+feature_names = list(train_c.drop(outcome, axis = 1).columns)
+```
+
+##### Scale all numeric features
+```{python}
+num_features = list(X.select_dtypes("number").columns)
+num_pipeline = Pipeline([
+    ("std_scaler", StandardScaler())
+])
+
+full_pipeline = ColumnTransformer([
+    ("num", num_pipeline, num_features)
+])
+
+X = full_pipeline.fit_transform(X)
+
+X
+```
+
+
+
+
+
+
+#### Inital Selected Models
+Multiple models will be used to _see the best that generalize well on the validation set.
+
+```{python}
+log_reg = LogisticRegression(random_state=11)
+dt_class = DecisionTreeClassifier(random_state=11)
+rf_class = RandomForestClassifier(random_state=11, n_jobs=-1)
+knn_class = KNeighborsClassifier(n_jobs=-1)
+
+model = [log_reg, dt_class, rf_class, knn_class]
+model_names = ["Logistic Regression", "Decision Tree", "Random Forest", "K-Neighbors"]
+```
+
+#### Cross Validation
+
+```{python}
+def cross_validation(model, x=X, y=y, model_name="model", cv=5):
+    y_pred = cross_val_predict(model, x, y, cv=cv, n_jobs=-1) 
+        
+    print(f"{model_name}\n{'='*50}")
+    
+    print(f"Confusion Matrix ::-\n{confusion_matrix(y, y_pred)}")
+    print(50*"-","\n")
+    print(f"Accuracy :: {accuracy_score(y, y_pred)}\n")
+    print(classification_report(y, y_pred))
+```
+
+For better model performance evaluation the training set will be divided into a smaller training set and a validation set (default will be 5 splits).
+```{python}
+for mdl, mdl_name in zip(model, model_names):
+    cross_validation(mdl, model_name=mdl_name)
+    print("\n\n")
+```
+
+Out of all the inital selected models, The Random Forest model have the best performance when we look at it accuracy score in predicting sensor device signal offsets. The model also looks promising in generalizing well on other data.
+
+
+
+```{python}
+def eval_gs(gs, output="best_estimator"):
+    if output == "best_estimator":
+        return gs.best_estimator_
+    elif output == "best_param":
+        return gs.best_params_
+    elif output == "scores_table":
+        cv_res = gs.cv_results_
+        
+        f_df = pd.DataFrame(cv_res["params"])
+        f_df["mean_test_score"] = cv_res["mean_test_score"]
+        f_df["rank_test_score"] = cv_res["rank_test_score"]
+        f_df["mean_train_score"] = cv_res["mean_train_score"]
+        return f_df.sort_values(by="rank_test_score", ascending=True)
+    
+    elif output == "feature_importance":
+        feature_importances = grid_search.best_estimator_.feature_importances_
+        feat_imp = pd.DataFrame(sorted(zip(feature_names, feature_importances), reverse=True), columns = ["importance_score", "Feature"])
+        return feat_imp.sort_values(by = "Feature", ascending=False)
+    else:
+        raise ValueError("`output` variable was given a wrong value.")
+```
+
+
+#### Hyperparameter Tuning
+Using multiple random forest parameters to train the model on the data, in oreder to get the best combination of hyperparameter values.
+```{python}
+param_grid = {"n_estimators": [100, 200, 300], "max_leaf_nodes": [10, 16], 'max_features':[3, 4]}
+
+grid_search = GridSearchCV(rf_class, param_grid, cv=4, n_jobs=-1, return_train_score=True)
+
+grid_search.fit(X, y)
+```
+
+
+##### Best Estimators
+```{python}
+eval_gs(grid_search)
+```
+
+
+```{python}
+eval_gs(grid_search, "best_param")
+```
+
+
+```{python}
+eval_gs(grid_search, "scores_table")
+```
+
+
+##### Feature Importance
+Finding the relative importance of each feature for making accurate predictions.
+```{python}
+ft_imp = eval_gs(grid_search, "feature_importance")
+ft_imp
+```
+
+
+```{python}
+(
+    ggplot(ft_imp, aes(x="reorder(importance_score, Feature)", y="Feature")) +
+    geom_col(fill="#788BFF") +
+    coord_flip() +
+    labs(x="", y="", title="Feature Importance") +
+    theme_light() +
+    theme(plot_title= element_text(color="#8F8F8F"))
+)
+```
+
+
+### Engineering The Test Set
+All missing values will be imputed with their respective median value and all other feature transformation done on the train set will be used on the test set.
+
+
+```{python}
+test = pd.read_csv('data/test.csv', parse_dates = ['Datetime'])
+
+ord_test = test.sort_values(by="Datetime").reset_index(drop=True)
+
+add_df = cfun.add_attributes(ord_test, drop_nan_value=False, fill_nan_value=True)
+
+test_c = add_df.fill_missing_value(fill_fun = "median")
+test_c = add_df.add_air_quality_index()
+test_c = add_df.add_period_variables(hour=True, dayofyear=True)
+test_c = test_c.drop(["ID", "Datetime"], axis = 1)
+
+test_c = full_pipeline.transform(test_c)
+```
+
+
+
+```{python}
+final_model = grid_search.best_estimator_
+
+final_prediction = final_model.predict(test_c)
+```
+
+
+```{python}
+samplesubmission = pd.read_csv('data/SampleSubmission.csv')
+```
+
+```{python}
+accuracy_score(samplesubmission["Offset_fault"], final_prediction)
+```
+
+
+```{python}
+confusion_matrix(samplesubmission["Offset_fault"], final_prediction)
+```
+
+
+```{python}
+#| warning: false
+#| message: false
+print(classification_report(samplesubmission["Offset_fault"], final_prediction))
+```
+
+The test set seems to have an unusual task of predicting just one class which was the time the PM sensors where considered to have no offset faults. That been said, the model only detect that there were no fault in the sensor signals 79% of the time. Given that there are only 0s i.e non offset sensor signals we have a percision of 100%.
+
+
+#### Saving Fitted Model
+```{python}
+#| eval: false
+import pickle 
+
+with open("pm2.5_sensor_offset.pkl", "wb") as f:
+    pickle.dump(final_model, f)
+```
+
+##### Function to easily make future predictions
+```{python}
+#| eval: false
+def make_predictions(data_file_path, model_file_path):
+    """
+    param: data_file_path : The file path to the new set of records.
+    param: model_file_path: The file path to the pickle serialized file.
+
+    return: pandas serise with predicted values.
+    """
+
+    # data transformation
+    from function import add_attributes
+    from pandas import Series
+    ord_rec = test.sort_values(by="Datetime").reset_index(drop=True)
+
+    add_df = add_attributes(ord_rec, drop_nan_value=False, fill_nan_value=True)
+
+    rec_c = add_df.fill_missing_value(fill_fun = "median")
+    rec_c = add_df.add_air_quality_index()
+    rec_c = add_df.add_period_variables(hour=True, dayofyear=True)
+    rec_c = rec_c.drop(["ID", "Datetime"], axis = 1)
+
+    rec_c = full_pipeline.transform(rec_c)
+
+    # Load model
+    with open(model_file_path, "rb") as f:
+        model = pickle.load(f)
+    
+    # Generate predictions
+    y_preds = model.predict(rec_c)
+
+    # keep predictions in a pandas series
+    y_preds = Series(y_preds, index=ord_rec, name="pm2.5_sensor_offsets")
+
+    return y_preds
+
+```

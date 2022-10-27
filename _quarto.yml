@@ -1,0 +1,36 @@
+project:
+  type: website
+  output-dir: docs
+website: 
+  title: PM2.5 Sensor Offset Fault Prediction
+  navbar:
+      left:
+        - href: index.qmd
+          text: Exploration
+        - href: model_page.qmd
+          text: Offset Fault Prediction
+      right: 
+        - icon: github
+          href: https://github.com/
+          aria-label: GitHub
+      background: "#7F7EFF"
+      foreground: light
+  page-navigation: true
+  page-footer:
+    background: dark
+    left: "Ayomide Akinwande. September, 2022"
+    right: 
+      - icon: github
+        href: https://github.com
+      - icon: twitter
+        href: https://twitter.com
+format: 
+    html:
+        theme: zephyr
+        css: styles.css
+        toc: true
+        toc-title: "Table Of Content"
+        backgroundcolor: "#FEFEFF"
+        page-layout: full
+        fig-align: center
+jupyter: python3

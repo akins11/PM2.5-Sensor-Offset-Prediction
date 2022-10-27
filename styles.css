@@ -1,0 +1,28 @@
+.div-wd {
+    width: 70%;
+    height: 5%;
+    padding: 5px;
+    margin: 5px;
+    right: 50px;
+    left: 50px;
+  }
+  
+  .ul-s {
+    list-style: none;
+  }
+  
+  .list ul li a {
+    font-size: 20px;
+    text-transform: capitalize;
+    text-decoration: none;
+    font-weight: 300;
+    color: #5E5E5E;
+    display: block;
+    transition: all 0.3s ease;
+  }
+  
+  .list ul li a:hover {
+    color: #292929;
+    font-weight: 300;
+    padding-left: 8px;
+  }
